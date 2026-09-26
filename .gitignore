@@ -1,0 +1,19 @@
+# Xcode — per-user state (schemes, breakpoints, window layout)
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# Xcode — build products
+DerivedData/
+build/
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Swift Package Manager
+.swiftpm/
+
+# macOS
+.DS_Store
