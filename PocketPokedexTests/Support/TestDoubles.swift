@@ -368,7 +368,10 @@ enum JSONFixture {
             ("special-attack", 65), ("special-defense", 65), ("speed", 45)
         ],
         abilities: [(slot: Int, name: String, isHidden: Bool)] = [(1, "overgrow", false)],
-        moves: [Move] = []
+        moves: [Move] = [],
+        /// The species this entry points at. Defaults to the entry's own id, which is what every
+        /// non-form Pokémon does; a form points somewhere else.
+        speciesID: Int? = nil
     ) -> String {
         let spriteOthers: String = {
             var parts: [String] = []
@@ -395,6 +398,7 @@ enum JSONFixture {
         {
           "id": \(id),
           "name": "\(jsonString(name))",
+          "species": { "name": "\(jsonString(name))", "url": "https://pokeapi.co/api/v2/pokemon-species/\(speciesID ?? id)/" },
           "base_experience": \(baseExperience.map(String.init) ?? "null"),
           "height": \(height),
           "weight": \(weight),

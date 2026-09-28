@@ -23,8 +23,24 @@ nonisolated struct LivePokemonService: PokemonService {
     }
 
     func species(_ identifier: PokemonIdentifier) async throws -> PokemonSpecies {
-        let payload: PokemonSpeciesPayload = try await client.get(.pokemonSpecies(identifier))
-        return Self.mapSpecies(payload)
+        do {
+            let payload: PokemonSpeciesPayload = try await client.get(.pokemonSpecies(identifier))
+            return Self.mapSpecies(payload)
+        } catch PokeAPIError.notFound {
+            // A form has a /pokemon entry but no /pokemon-species one of its own: #10321 is
+            // glimmora-mega, while /pokemon-species/970 is glimmora. Its own payload names the
+            // species it belongs to, so follow that instead of failing the screen.
+            guard let speciesIdentifier = try await speciesIdentifier(for: identifier) else {
+                throw PokeAPIError.notFound
+            }
+            let payload: PokemonSpeciesPayload = try await client.get(.pokemonSpecies(.id(speciesIdentifier)))
+            return Self.mapSpecies(payload)
+        }
+    }
+
+    private func speciesIdentifier(for identifier: PokemonIdentifier) async throws -> Int? {
+        let payload: PokemonPayload = try await client.get(.pokemon(identifier))
+        return Self.identifier(fromResourceURL: payload.species.url)
     }
 
     func availableTypes() async throws -> [PokemonType] {

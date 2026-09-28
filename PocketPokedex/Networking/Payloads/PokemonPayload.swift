@@ -3,6 +3,9 @@ import Foundation
 nonisolated struct PokemonPayload: Decodable, Sendable {
     let id: Int
     let name: String
+    /// The species this entry belongs to. A form — a mega, a regional variant — has its own id here
+    /// but points at the species it was bred from, which is what the detail screen needs.
+    let species: NamedResourcePayload
     let baseExperience: Int?
     let height: Int
     let weight: Int

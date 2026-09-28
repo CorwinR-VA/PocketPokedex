@@ -244,6 +244,7 @@ struct LivePokemonServicePokemonTests {
         let json = """
         {
           "id": 1, "name": "bulbasaur", "height": 7, "weight": 69,
+          "species": { "name": "bulbasaur", "url": "https://pokeapi.co/api/v2/pokemon-species/1/" },
           "sprites": {
             "front_default": "https://art.test/front/1.png",
             "other": {
@@ -410,6 +411,68 @@ struct LivePokemonServiceSpeciesTests {
         let species = try await LivePokemonService(client: PokeAPIClient(transport: transport)).species(.id(1))
 
         #expect(species.evolutionChainIdentifier == 42)
+    }
+
+    @Test("Asks for the species only once when it exists")
+    func doesNotLookUpTheSpeciesTwice() async throws {
+        let transport = StubHTTPClient(json: JSONFixture.species(id: 1))
+        _ = try await LivePokemonService(client: PokeAPIClient(transport: transport)).species(.id(1))
+
+        #expect(transport.requests.count == 1)
+    }
+
+    @Test("Resolves a form's species through the pokemon payload")
+    func resolvesAFormThroughThePokemonPayload() async throws {
+        // #10321 is glimmora-mega, which has no species of its own; #970 is glimmora.
+        let formID = 10_321
+        let speciesID = 970
+        let transport = StubHTTPClient(responder: { request in
+            let path = request.url?.path() ?? ""
+            let json: String
+            let status: Int
+
+            if path == "/api/v2/pokemon-species/\(formID)" {
+                json = #"{"status":404,"message":"Not Found"}"#
+                status = 404
+            } else if path == "/api/v2/pokemon/\(formID)" {
+                json = JSONFixture.pokemon(id: formID, name: "glimmora-mega", speciesID: speciesID)
+                status = 200
+            } else if path == "/api/v2/pokemon-species/\(speciesID)" {
+                json = JSONFixture.species(id: speciesID)
+                status = 200
+            } else {
+                json = #"{"status":404,"message":"Not Found"}"#
+                status = 404
+            }
+
+            return (Data(json.utf8), Self.response(for: request, statusCode: status))
+        })
+
+        let species = try await LivePokemonService(client: PokeAPIClient(transport: transport)).species(.id(formID))
+
+        #expect(species.id == speciesID)
+        #expect(transport.requests.count == 3)
+    }
+
+    @Test("Still reports a missing species when the pokemon is missing too")
+    func reportsNotFoundWhenNeitherExists() async throws {
+        // The id names neither a species nor a pokemon, so there is nothing to resolve through.
+        let transport = StubHTTPClient(responder: { request in
+            (Data(#"{"status":404,"message":"Not Found"}"#.utf8), Self.response(for: request, statusCode: 404))
+        })
+
+        await #expect(throws: PokeAPIError.notFound) {
+            _ = try await LivePokemonService(client: PokeAPIClient(transport: transport)).species(.id(999_999))
+        }
+    }
+
+    private static func response(for request: URLRequest, statusCode: Int) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: request.url ?? URL(string: "https://pokeapi.co")!,
+            statusCode: statusCode,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
     }
 }
 
