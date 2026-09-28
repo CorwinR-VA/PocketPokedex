@@ -1,3 +1,10 @@
+
+
+https://github.com/user-attachments/assets/e44dbc62-adbf-4554-b7c7-712343cd7cde
+
+
+
+
 # Pocket Pokédex
 
 An iOS Pokédex built with SwiftUI: a paginated gallery of every Pokémon, a detail screen with base stats, level-up moves and Pokédex lore, and a persisted "team" the user marks with the `+` on any card.
