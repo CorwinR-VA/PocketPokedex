@@ -59,6 +59,15 @@ final class PokedexFeedViewModel {
             .joined(separator: " and ")
     }
 
+    /// Closes the feed: the size of the dex, or — once a filter has finished loading every page —
+    /// the number of Pokémon that matched it.
+    var paginationFooterText: String {
+        guard !selectedTypes.isEmpty else {
+            return "That's all \(totalCount) Pokémon."
+        }
+        return "That's all \(visibleItems.count) \(selectedTypeSummary) type Pokémon."
+    }
+
     /// All-of matching: a card has to carry every selected type. An empty selection matches
     /// everything, which is what the team path relies on.
     private func matchesSelectedTypes(_ item: PokemonFeedItem) -> Bool {

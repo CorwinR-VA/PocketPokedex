@@ -267,6 +267,33 @@ struct PokedexFeedViewModelTests {
         #expect(viewModel.visibleItems.isEmpty)
     }
 
+    @Test("Closes the feed with the size of the dex, or of the filtered result")
+    func paginationFooterNamesTheFilter() async {
+        let service = Self.stubService(details: Self.details(
+            Fixture.pokemon(id: 1, types: [.grass]),
+            Fixture.pokemon(id: 2, types: [.fire]),
+            Fixture.pokemon(id: 3, types: [.grass, .poison]),
+            Fixture.pokemon(id: 4, types: [.water])
+        ))
+        let viewModel = Self.makeViewModel(service: service, pageSize: 2)
+
+        await viewModel.start()
+        await viewModel.loadMoreIfNeeded()
+        await waitUntil { viewModel.items.allSatisfy { !$0.types.isEmpty } }
+
+        // Unfiltered, the line is about the whole dex rather than the loaded pages.
+        #expect(viewModel.totalCount == 4)
+        #expect(viewModel.paginationFooterText == "That's all 4 Pokémon.")
+
+        viewModel.selectedTypes = [.grass]
+        #expect(viewModel.paginationFooterText == "That's all 2 Grass type Pokémon.")
+
+        // Two types read as "and", named in chip order rather than the order they were tapped.
+        viewModel.selectedTypes = [.poison, .grass]
+        #expect(viewModel.selectedTypeSummary == "Grass and Poison")
+        #expect(viewModel.paginationFooterText == "That's all 1 Grass and Poison type Pokémon.")
+    }
+
     // MARK: Team
 
     @Test("Loads marked pokemon by id, never by filtering the loaded pages")

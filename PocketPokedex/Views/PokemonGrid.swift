@@ -73,8 +73,8 @@ struct PokemonGrid: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: PokedexTheme.Metrics.minimumTapTarget)
                 .padding(.vertical, 8)
-        } else if !viewModel.items.isEmpty {
-            Text("That's all \(viewModel.totalCount) Pokémon.")
+        } else if !viewModel.visibleItems.isEmpty {
+            Text(viewModel.paginationFooterText)
                 .font(.pokedexParagraph)
                 .foregroundStyle(PokedexTheme.textSecondary)
                 .frame(maxWidth: .infinity)
