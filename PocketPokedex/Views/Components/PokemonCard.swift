@@ -51,7 +51,9 @@ struct PokemonCard: View {
     }
 
     private var artwork: some View {
-        CachedArtworkImage(url: item.artworkURL)
+        // Hydration fills in both the types and the artwork URL, so an empty type row means this
+        // card's artwork URL may still arrive — as opposed to a form that simply has none.
+        CachedArtworkImage(url: item.artworkURL, isAwaitingDetails: item.types.isEmpty)
             .frame(
                 width: PokedexTheme.Metrics.cardArtworkWidth,
                 height: PokedexTheme.Metrics.cardArtworkHeight

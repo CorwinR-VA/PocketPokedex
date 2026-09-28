@@ -26,7 +26,9 @@ struct PokemonDetailHero: View {
     }
 
     private var artwork: some View {
-        CachedArtworkImage(url: viewModel.artworkURL)
+        // The hero falls back to the feed item's artwork, so a missing URL here may still be filled in
+        // by the detail request that is already in flight.
+        CachedArtworkImage(url: viewModel.artworkURL, isAwaitingDetails: viewModel.pokemon == nil)
             .frame(width: 200, height: 218)
     }
 

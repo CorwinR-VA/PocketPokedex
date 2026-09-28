@@ -4,17 +4,19 @@ struct CachedArtworkImage: View {
     @Environment(\.imageCache) private var imageCache
 
     private let url: URL?
-    @State private var loadedImage: UIImage?
-    @State private var loadedImageURL: URL?
-    @State private var didFail = false
+    private let isAwaitingDetails: Bool
+    @State private var loader = ArtworkLoader()
 
-    init(url: URL?) {
+    /// - Parameter isAwaitingDetails: whether the card's artwork URL can still change, which is what
+    ///   tells a missing URL apart from a Pokémon that has no artwork at all.
+    init(url: URL?, isAwaitingDetails: Bool = false) {
         self.url = url
+        self.isAwaitingDetails = isAwaitingDetails
     }
 
     var body: some View {
         Group {
-            if let image = resolvedImage {
+            if let image = loader.resolvedImage(for: url, in: imageCache) {
                 Image(uiImage: image)
                     .resizable()
                     .interpolation(.high)
@@ -24,16 +26,22 @@ struct CachedArtworkImage: View {
                 placeholder
             }
         }
-        .task(id: url) { await load() }
+        .task(id: Request(url: url, isAwaitingDetails: isAwaitingDetails)) {
+            await loader.load(url, isAwaitingDetails: isAwaitingDetails, in: imageCache)
+        }
+    }
+
+    /// The task re-runs when the URL arrives *or* when hydration settles without one, because both
+    /// change what there is to show.
+    private struct Request: Equatable {
+        let url: URL?
+        let isAwaitingDetails: Bool
     }
 
     @ViewBuilder
     private var placeholder: some View {
-        if didFail {
-            Image(systemName: "photo")
-                .font(.system(size: 22))
-                .foregroundStyle(PokedexTheme.textSecondary.opacity(0.5))
-                .accessibilityHidden(true)
+        if loader.isUnavailable {
+            noArtwork
         } else {
             ProgressView()
                 .controlSize(.regular)
@@ -41,34 +49,15 @@ struct CachedArtworkImage: View {
         }
     }
 
-    private var resolvedImage: UIImage? {
-        guard let url else { return nil }
-        if loadedImageURL == url, let loadedImage { return loadedImage }
-        return imageCache.cachedImage(for: url)
-    }
-
-    private func load() async {
-        guard let url else {
-            didFail = true
-            return
-        }
-
-        if imageCache.cachedImage(for: url) != nil {
-            didFail = false
-            return
-        }
-
-        do {
-            let image = try await imageCache.image(for: url)
-            guard !Task.isCancelled else { return }
-            didFail = false
-            withAnimation(.easeOut(duration: 0.18)) {
-                loadedImageURL = url
-                loadedImage = image
-            }
-        } catch {
-            guard !Task.isCancelled else { return }
-            didFail = true
-        }
+    /// A quiet Poké Ball rather than a broken-image glyph: a handful of forms have no artwork
+    /// anywhere in the API, and that is not the same thing as a load that failed.
+    private var noArtwork: some View {
+        Image(.motifPokeball)
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 34, height: 34)
+            .foregroundStyle(PokedexTheme.textSecondary.opacity(0.35))
+            .accessibilityHidden(true)
     }
 }

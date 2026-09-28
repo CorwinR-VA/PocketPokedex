@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import PocketPokedex
 
 // MARK: - Awaiting
@@ -592,5 +593,71 @@ enum JSONFixture {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(T.self, from: Data(json.utf8))
+    }
+}
+
+// MARK: - Images
+
+/// An `ImageCaching` double whose contents and failures a test drives directly, so artwork loading
+/// can be exercised without a socket.
+///
+/// It keeps the two halves of the real cache apart the way `ImageCache` does: `served` is what a
+/// fetch can return, and only a successful fetch — or `seed` — leaves an image where `cachedImage`,
+/// the synchronous path a view paints from, will find it.
+nonisolated final class StubImageCache: ImageCaching, @unchecked Sendable {
+    private struct State {
+        var served: [URL: UIImage]
+        var cached: [URL: UIImage] = [:]
+        var remainingFailures: Int
+        var loads = 0
+    }
+
+    private let lock = NSLock()
+    private var state: State
+
+    /// - Parameters:
+    ///   - failures: how many of the next fetches should fail before one succeeds.
+    ///   - served: artwork a fetch can return.
+    ///   - cached: artwork already in the cache, as another screen would have left it.
+    init(failures: Int = 0, served: [URL: UIImage] = [:], cached: [URL: UIImage] = [:]) {
+        state = State(served: served, cached: cached, remainingFailures: failures)
+    }
+
+    /// How many times the network path was asked. A cache hit must not increase this.
+    var loadCount: Int { withLock { $0.loads } }
+
+    /// Puts an image in the cache behind the loader's back, the way another screen would.
+    func seed(_ image: UIImage, for url: URL) {
+        mutate { $0.cached[url] = image }
+    }
+
+    func image(for url: URL) async throws -> UIImage {
+        let shouldFail = mutate { state -> Bool in
+            state.loads += 1
+            guard state.remainingFailures > 0 else { return false }
+            state.remainingFailures -= 1
+            return true
+        }
+        if shouldFail { throw PokeAPIError.transport(description: "offline") }
+
+        guard let image = withLock({ $0.served[url] }) else { throw PokeAPIError.notFound }
+        mutate { $0.cached[url] = image }
+        return image
+    }
+
+    func cachedImage(for url: URL) -> UIImage? {
+        withLock { $0.cached[url] }
+    }
+
+    private func withLock<T>(_ body: (State) -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body(state)
+    }
+
+    private func mutate<T>(_ body: (inout State) -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body(&state)
     }
 }
