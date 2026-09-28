@@ -3,6 +3,9 @@ import SwiftUI
 struct PokemonCard: View {
     let item: PokemonFeedItem
     var isInTeam: Bool = false
+    /// Whether this card's details are still loading. A card that has settled without artwork shows
+    /// a no-artwork mark rather than a spinner that would never stop.
+    var isAwaitingDetails: Bool = false
     var onSelect: () -> Void = {}
     var onToggleTeam: () -> Void = {}
 
@@ -51,9 +54,7 @@ struct PokemonCard: View {
     }
 
     private var artwork: some View {
-        // Hydration fills in both the types and the artwork URL, so an empty type row means this
-        // card's artwork URL may still arrive — as opposed to a form that simply has none.
-        CachedArtworkImage(url: item.artworkURL, isAwaitingDetails: item.types.isEmpty)
+        CachedArtworkImage(url: item.artworkURL, isAwaitingDetails: isAwaitingDetails)
             .frame(
                 width: PokedexTheme.Metrics.cardArtworkWidth,
                 height: PokedexTheme.Metrics.cardArtworkHeight

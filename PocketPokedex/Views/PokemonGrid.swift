@@ -24,6 +24,7 @@ struct PokemonGrid: View {
                     PokemonCard(
                         item: item,
                         isInTeam: teamStore.contains(item.id),
+                        isAwaitingDetails: viewModel.isAwaitingDetails(for: item.id),
                         onSelect: { selectedItem = item },
                         onToggleTeam: { teamStore.toggle(item.id) }
                     )
@@ -108,11 +109,17 @@ struct PokemonGrid: View {
                 teamEmptyState
             }
         } else if !viewModel.hasMorePages {
-            EmptyStateView(
-                icon: "magnifyingglass",
-                title: "No \(viewModel.selectedTypeSummary) Pokémon found.",
-                message: emptyFilterHint
-            )
+            // A card's types only arrive with its detail request, so "nothing matched" is only true
+            // once every loaded card has reported. Until then this is still a search in progress.
+            if viewModel.isAwaitingCardTypes {
+                loadingIndicator
+            } else {
+                EmptyStateView(
+                    icon: "magnifyingglass",
+                    title: "No \(viewModel.selectedTypeSummary) Pokémon found.",
+                    message: emptyFilterHint
+                )
+            }
         }
     }
 

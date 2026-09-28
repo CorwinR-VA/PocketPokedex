@@ -294,6 +294,134 @@ struct PokedexFeedViewModelTests {
         #expect(viewModel.paginationFooterText == "That's all 1 Grass and Poison type Pokémon.")
     }
 
+    // MARK: Hydration
+
+    @Test("Hydrates a slow page before paging ends, so a filter can still find its cards")
+    func hydratesPagesThatOutliveTheirLoad() async {
+        let secondPageURL = URL(string: "https://pokeapi.co/api/v2/pokemon?limit=3&offset=3")!
+        let firstPage = Fixture.page(
+            (1...3).map { Fixture.feedItem(id: $0) },
+            nextPageURL: secondPageURL
+        )
+        let secondPage = Fixture.page((4...6).map { Fixture.feedItem(id: $0) })
+
+        // Only the last card of the first page carries the pair, so it is the one an abandoned
+        // hydration loses.
+        var details: [Int: Pokemon] = [:]
+        for id in 1...6 {
+            details[id] = id == 3
+                ? Fixture.pokemon(id: id, types: [.grass, .poison])
+                : Fixture.pokemon(id: id, types: [.fire])
+        }
+
+        let service = RecordingPokemonService(
+            pageHandler: { request in
+                request.followedURL == secondPageURL ? secondPage : firstPage
+            },
+            pokemonHandler: { identifier in
+                // Slower than the pause between filter-driven page loads, so the second page lands
+                // while this page's hydration is still in flight and cancels it.
+                try await Task.sleep(for: .milliseconds(300))
+                guard case .id(let id) = identifier, let pokemon = details[id] else {
+                    throw PokeAPIError.notFound
+                }
+                return pokemon
+            },
+            speciesHandler: { _ in Fixture.species(id: 1) },
+            typesHandler: { PokemonType.allCases }
+        )
+
+        let viewModel = PokedexFeedViewModel(
+            service: service,
+            teamStore: TeamStore(defaults: Fixture.scratchDefaults()),
+            pageSize: 3
+        )
+
+        viewModel.selectedTypes = [.grass, .poison]
+        await viewModel.start()
+        await viewModel.loadMoreIfNeeded()
+
+        #expect(viewModel.hasMorePages == false)
+        // The match is loaded but not yet resolved, so the feed must not claim there are none.
+        #expect(viewModel.isAwaitingCardTypes)
+
+        await waitUntil { viewModel.visibleItems.map(\.id) == [3] }
+        #expect(viewModel.visibleItems.map(\.id) == [3])
+
+        // The queue settles every card, including the ones behind the match.
+        await waitUntil { !viewModel.isAwaitingCardTypes }
+        #expect(!viewModel.isAwaitingCardTypes)
+    }
+
+    @Test("Keeps hydrating a page while the next page is already loading")
+    func hydratesThroughBackToBackPages() async {
+        let secondPageURL = URL(string: "https://pokeapi.co/api/v2/pokemon?limit=3&offset=3")!
+        let thirdPageURL = URL(string: "https://pokeapi.co/api/v2/pokemon?limit=3&offset=6")!
+        let firstPage = Fixture.page((1...3).map { Fixture.feedItem(id: $0) }, nextPageURL: secondPageURL)
+        let secondPage = Fixture.page((4...6).map { Fixture.feedItem(id: $0) }, nextPageURL: thirdPageURL)
+        let thirdPage = Fixture.page((7...9).map { Fixture.feedItem(id: $0) })
+
+        let service = RecordingPokemonService(
+            pageHandler: { request in
+                switch request.followedURL {
+                case secondPageURL: secondPage
+                case thirdPageURL: thirdPage
+                default: firstPage
+                }
+            },
+            pokemonHandler: { identifier in
+                // Slow enough that a page's details are always still arriving when the next page
+                // lands, which is what a fast scroll looks like on the wire.
+                try await Task.sleep(for: .milliseconds(40))
+                guard case .id(let id) = identifier else { throw PokeAPIError.notFound }
+                return Fixture.pokemon(id: id, types: [.fire])
+            },
+            speciesHandler: { _ in Fixture.species(id: 1) },
+            typesHandler: { PokemonType.allCases }
+        )
+
+        let viewModel = PokedexFeedViewModel(
+            service: service,
+            teamStore: TeamStore(defaults: Fixture.scratchDefaults()),
+            pageSize: 3
+        )
+
+        await viewModel.start()
+        await viewModel.loadMoreIfNeeded()
+
+        // Paging has not finished, so nothing will come back for the first page: its hydration has to
+        // survive on its own or those cards stay permanently bare — no types, and no artwork URL for
+        // any image loader to fetch.
+        #expect(viewModel.hasMorePages)
+        #expect(viewModel.isAwaitingDetails(for: 1))
+
+        await waitUntil { viewModel.items.prefix(3).allSatisfy { !$0.types.isEmpty } }
+        #expect(viewModel.items.prefix(3).allSatisfy { !$0.types.isEmpty })
+
+        // ...and the queue keeps going for the pages behind it.
+        await viewModel.loadMoreIfNeeded()
+        await waitUntil { viewModel.items.allSatisfy { !$0.types.isEmpty } }
+        #expect(viewModel.items.allSatisfy { !$0.types.isEmpty })
+    }
+
+    @Test("Stops awaiting types when a card's detail request fails")
+    func settlesWhenHydrationFails() async {
+        // No details at all, so every detail request fails and leaves its card bare.
+        let service = Self.stubService(details: [:])
+        let viewModel = Self.makeViewModel(service: service, pageSize: 2)
+
+        await viewModel.start()
+        await viewModel.loadMoreIfNeeded()
+
+        #expect(viewModel.hasMorePages == false)
+        await waitUntil { !viewModel.isAwaitingCardTypes }
+        // A failure has to settle the wait, or the empty state would stay suppressed forever and the
+        // card would spin for an image that is never coming.
+        #expect(!viewModel.isAwaitingCardTypes)
+        #expect(!viewModel.isAwaitingDetails(for: 1))
+        #expect(viewModel.items.allSatisfy { $0.types.isEmpty })
+    }
+
     // MARK: Team
 
     @Test("Loads marked pokemon by id, never by filtering the loaded pages")

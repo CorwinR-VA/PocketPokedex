@@ -36,6 +36,20 @@ final class PokedexFeedViewModel {
     private(set) var isLoadingTeam = false
     private(set) var teamErrorMessage: String?
 
+    /// Ids whose detail request has been sent but has not settled yet — whether it succeeds or fails.
+    /// A card's types only arrive with that request, so until it settles the feed cannot say whether
+    /// the card satisfies a filter. Failure counts as settled, or a card whose detail request failed
+    /// would leave the empty state suppressed forever.
+    private var identifiersAwaitingTypes: Set<Int> = []
+
+    var isAwaitingCardTypes: Bool { !identifiersAwaitingTypes.isEmpty }
+
+    /// Whether one card's details are still on their way, so a view can tell a wait apart from a
+    /// Pokémon whose artwork will never arrive.
+    func isAwaitingDetails(for identifier: Int) -> Bool {
+        identifiersAwaitingTypes.contains(identifier)
+    }
+
     var visibleItems: [PokemonFeedItem] {
         guard !showsOnlyTeam else {
             return teamItems.filter { teamStore.contains($0.id) && matchesSelectedTypes($0) }
@@ -82,6 +96,8 @@ final class PokedexFeedViewModel {
     private var nextPageOffset = 0
     private var pageRequest: Task<PokemonPage, any Error>?
     private var hydrationTask: Task<Void, Never>?
+    private var hydrationQueue: [Int] = []
+    private var queuedIdentifiers: Set<Int> = []
 
     init(
         service: any PokemonService,
@@ -119,6 +135,9 @@ final class PokedexFeedViewModel {
         }
 
         hydrationTask?.cancel()
+        hydrationQueue = []
+        queuedIdentifiers = []
+        identifiersAwaitingTypes = []
         nextPageURL = nil
         nextPageOffset = 0
         hasMorePages = true
@@ -180,7 +199,13 @@ final class PokedexFeedViewModel {
             loadedPageCount += 1
             phase = .loaded
 
-            hydrateDetails(for: page.items)
+            if hasMorePages {
+                hydrateDetails(for: page.items)
+            } else {
+                // Paging is over, so give a card whose detail request failed during the scroll one
+                // more try — the queue drains work, it does not retry failures.
+                hydrateDetails(for: items.filter { $0.types.isEmpty })
+            }
         } catch {
             let apiError = PokeAPIError.from(error)
             guard apiError != .cancelled else { return }
@@ -252,19 +277,49 @@ final class PokedexFeedViewModel {
         availableTypes = types
     }
 
+    /// Queues the cards that still need their details and starts draining if nothing is draining.
+    ///
+    /// Pages arrive faster than forty detail requests can finish — a fast scroll loads them back to
+    /// back — so a new page *adds* to the queue instead of cancelling the page before it. Cancelling
+    /// is what used to strand cards: an unhydrated card has no types and no artwork URL, so it can
+    /// never satisfy a filter and no image loader can ever fetch it, however well the cache works.
     private func hydrateDetails(for pageItems: [PokemonFeedItem]) {
-        let identifiers = pageItems.map(\.id)
-        hydrationTask?.cancel()
+        let identifiers = pageItems.map(\.id).filter { queuedIdentifiers.insert($0).inserted }
+        guard !identifiers.isEmpty else { return }
+
+        hydrationQueue.append(contentsOf: identifiers)
+        identifiersAwaitingTypes.formUnion(identifiers)
+
+        guard hydrationTask == nil else { return }
         hydrationTask = Task { [weak self] in
-            guard let self else { return }
-            _ = await withBoundedTaskGroup(over: identifiers, maxConcurrent: self.detailConcurrency) { identifier in
+            await self?.drainHydrationQueue()
+            self?.hydrationTask = nil
+        }
+    }
+
+    private func drainHydrationQueue() async {
+        while !hydrationQueue.isEmpty, !Task.isCancelled {
+            let batch = Array(hydrationQueue.prefix(detailConcurrency))
+            hydrationQueue.removeFirst(batch.count)
+            batch.forEach { queuedIdentifiers.remove($0) }
+
+            _ = await withBoundedTaskGroup(over: batch, maxConcurrent: detailConcurrency) { identifier in
                 await self.hydrate(identifier)
             }
         }
     }
 
     private func hydrate(_ pokemonIdentifier: Int) async {
-        guard let pokemon = try? await service.pokemon(.id(pokemonIdentifier)) else { return }
+        guard let pokemon = try? await service.pokemon(.id(pokemonIdentifier)) else {
+            // A cancelled request is re-queued by whoever cancelled it, and a refresh has already
+            // cleared the sets, so only a real failure settles the wait here.
+            if !Task.isCancelled {
+                identifiersAwaitingTypes.remove(pokemonIdentifier)
+            }
+            return
+        }
+
+        identifiersAwaitingTypes.remove(pokemonIdentifier)
 
         guard let index = items.firstIndex(where: { $0.id == pokemonIdentifier }) else { return }
         items[index] = PokemonFeedItem(pokemon: pokemon)
