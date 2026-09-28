@@ -144,7 +144,8 @@ Plain value types (`struct`, `Sendable`, no SwiftUI beyond a colour lookup on `P
 | `PokemonFeedItem` | A *card*. Starts as just an id and a slug from the list endpoint, then gets types and artwork filled in. |
 | `PokemonPage` | One page of the feed: items, the `next` link, the total count. |
 | `PokemonSpecies` | The lore half — genus, flavour text, catch rate, growth rate, the evolution chain's id. |
-| `EvolutionStage` | One node of a flattened evolution chain. |
+| `EvolutionStage` | One node of an evolution chain. |
+| `EvolutionLine` | One route through an evolution chain, base form to leaf. A branching chain — Eevee has eight — is one line per leaf, so the detail screen can draw each route on its own row instead of one run of arrows that would read as a linear chain. |
 | `PokemonStat` / `StatKind` | A base stat and its six kinds, whose raw values are the API's own slugs. |
 | `PokemonAbility`, `PokemonMove` | The two list-shaped details on a Pokémon. |
 | `PokemonType` | The eighteen elemental types, plus their chip colours. |
@@ -171,7 +172,7 @@ nonisolated protocol PokemonService: Sendable {
     func pokemon(_ identifier: PokemonIdentifier) async throws -> Pokemon
     func species(_ identifier: PokemonIdentifier) async throws -> PokemonSpecies
     func availableTypes() async throws -> [PokemonType]
-    func evolutionChain(id: Int) async throws -> [EvolutionStage]
+    func evolutionChain(id: Int) async throws -> [EvolutionLine]
 }
 ```
 
@@ -194,13 +195,15 @@ Three `@MainActor @Observable` classes. They own loading, filtering and selectio
 **`PokedexFeedViewModel`** drives the gallery and owns four concerns:
 
 1. **Pagination** — which page is loading, the `next` URL, an explicit offset, and whether more pages exist.
-2. **Filtering** — by type (client-side, over loaded pages) and by team membership.
+2. **Filtering** — by every selected type (client-side, over loaded pages, at most two chips) and by team membership.
 3. **Card hydration** — filling in types and artwork for a freshly loaded page, a few at a time, deliberately *not* awaited so pagination is never held up by artwork.
 4. **Team hydration** — fetching marked Pokémon by id, since a marked Pokémon is usually nowhere near the pages the feed has scrolled to.
 
 Its observable state is read-only from outside (`private(set)`) apart from the two filter flags. `Phase` models the feed as `idle`, `loadingFirstPage`, `loaded` or `failed(message:)`; `nextPageErrorMessage` is separate so a failure on page 7 can be shown inline without throwing away pages 1–6.
 
 **`PokemonDetailViewModel`** loads `/pokemon/{id}` and `/pokemon-species/{id}` concurrently, then follows the species' evolution-chain link afterwards (it only decorates one tab, so it must not delay the modal becoming usable). It also keeps the feed item it was opened with, so the header, name, artwork and types are readable on the very first frame — before any request returns.
+
+Both requests use the same id, which works because the service absorbs the one place that isn't true: **a form has no species entry of its own.** #10321 is `glimmora-mega`, and `/pokemon-species/10321` is a 404, while `/pokemon/10321` names its species as `/pokemon-species/970/`. `species(_:)` therefore falls back to the species link in the pokemon payload when the direct request 404s, which is why the detail screen opens for the 326 mega and regional forms in the dex. Keeping the discovery in the service is what preserves the view model's deliberate "a species that will not load fails the screen" rule — the two requests stay concurrent, and only a form pays the extra round trip (once, since `CachedPokemonService` memoises the resolved species under the id it was asked for).
 
 **`TeamStore`** is the persisted mark set: a `Set<Int>` of dex numbers under the `UserDefaults` key `pokedex.team.memberIDs`. One instance is shared by the cards' `+` buttons and the floating filter, so the grid and the badge can never disagree.
 
@@ -236,6 +239,8 @@ Every type lives in its own file. The `Views/Components/` set is the app's compo
 `PocketPokedexApp` builds `AppDependencies.live` once and hands it to `HomeView`, which asks it for a `PokedexFeedViewModel`. `HomeView`'s `.task` calls `start()`, which fires two independent requests concurrently: `/type` for the filter chips and `/pokemon?limit=40&offset=0` for the first page.
 
 The moment the page lands, the cards render immediately with their names and dex numbers — those came from the list endpoint — while `hydrateDetails` fetches `/pokemon/{id}` for all forty cards, six at a time, and fills in types and artwork as each arrives. Cards paint one by one rather than all at once.
+
+**Hydration is queued, never abandoned.** Pages arrive faster than forty detail requests can complete — a fast scroll loads them back to back — so a new page *adds* its cards to a queue that one long-lived task drains at `detailConcurrency`, rather than cancelling the page before it. Dropping that work is not a cosmetic problem: a card that is never hydrated has no types and **no artwork URL**, so it can never match a filter and no image loader can fetch it, however well the cache works. It shows up as cards stuck on a spinner part-way down the feed with their type badges missing, while the same Pokémon loads fine when opened. Paging end triggers one last pass over any card still missing its types, which retries a request that failed during the scroll. `isAwaitingCardTypes` / `isAwaitingDetails(for:)` track which cards are still in flight (a failure counts as settled), so the "No … Pokémon found" state and the cards' no-artwork mark wait for the truth instead of guessing.
 
 ### Pagination
 
@@ -299,6 +304,8 @@ Concurrent requests for one URL are coalesced into a single download, and the in
 
 Views reach the cache through the `\.imageCache` environment value and never through the singleton, so a preview can substitute a stub.
 
+A view does not simply load once. `ArtworkLoader` — the policy behind `CachedArtworkImage`, pulled out into its own type so it can be unit-tested — paints straight from the memory tier, retries a failed fetch a few times, and then keeps re-reading the cache on a short interval. That last part is what makes the cache shared in *behaviour* rather than only in wiring: the detail screen loads the same artwork, and `NSCache` has no way to tell a card that it changed, so a card whose own fetch failed still fills in once the detail caches the image. Only when the retries are spent does the view settle on a quiet Poké Ball meaning "no artwork" — which is what the four forms with no sprites anywhere in the API get (Koraidon's two builds, Miraidon's two modes).
+
 ---
 
 ## Previews and stubs
@@ -340,6 +347,6 @@ line references in [CODE_AUDIT.md](CODE_AUDIT.md).
 
 - **Dynamic Type is not supported.** The type scale uses fixed point sizes and most text rows have fixed heights, both taken from the mock, so a raised text size currently changes nothing. Making it relative means relaxing those fixed frames screen by screen, together with the design.
 - **The team is the only state that survives a relaunch.** The background theme and the appearance override are session state and reset with the process.
-- **Type filtering is client-side.** It runs over the pages already loaded, so a type whose members all sit further down the list is found by pulling pages until one appears. `/type/{name}` returns the complete member list in one request and would bound that cost.
+- **Type filtering is client-side and all-of.** It runs over the pages already loaded, so a combination whose members sit further down the list is found by pulling pages until one appears — and with all-of matching that is the common case rather than the edge case: 144 of the 153 type pairs leave fewer than a dozen cards, so the feed keeps pulling pages (up to all 34) and hydrating every card on them (up to 1,351 detail requests) before it can show the empty state. The chips therefore cap the selection at two, since no Pokémon has more than two types and nine pairs are empty outright. `/type/{name}` returns the complete member list in one request, and intersecting those lists would bound the cost.
 - **A few controls sit under the 44pt tap target** — the filter chips and the top-bar controls — because the containers that hold them are sized by the mock. The card's `+` has been widened to 44pt without moving the glyph.
 - **Measurements follow the device locale.** `MeasurementFormat` uses `FormatStyle`, so a comma-decimal locale shows `0,7 m`. The digit grouping is switched off so the strings stay short, and the tests assert against the locale's own separators rather than a pinned literal. Pin the locale instead if the design ever requires a full stop unconditionally.
