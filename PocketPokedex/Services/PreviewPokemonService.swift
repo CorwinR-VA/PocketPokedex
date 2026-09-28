@@ -84,12 +84,12 @@ nonisolated struct PreviewPokemonService: PokemonService {
         PokemonType.allCases
     }
 
-    func evolutionChain(id: Int) async throws -> [EvolutionStage] {
-        [
+    func evolutionChain(id: Int) async throws -> [EvolutionLine] {
+        [EvolutionLine(stages: [
             EvolutionStage(id: 1, name: "bulbasaur", artworkURL: nil, types: [.grass, .poison], requirement: nil),
             EvolutionStage(id: 2, name: "ivysaur", artworkURL: nil, types: [.grass, .poison], requirement: "Lv. 16"),
             EvolutionStage(id: 3, name: "venusaur", artworkURL: nil, types: [.grass, .poison], requirement: "Lv. 32")
-        ]
+        ])]
     }
 
     private func fixtureIndex(for id: Int) -> Int {

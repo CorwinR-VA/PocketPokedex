@@ -8,7 +8,7 @@ struct PokemonDetailViewModelTests {
     private static func stubService(
         pokemon: Pokemon? = nil,
         species: PokemonSpecies? = nil,
-        evolution: [EvolutionStage] = [],
+        evolution: [EvolutionLine] = [],
         evolutionError: (any Error)? = nil
     ) -> RecordingPokemonService {
         RecordingPokemonService(
@@ -47,7 +47,7 @@ struct PokemonDetailViewModelTests {
         #expect(viewModel.weightText == MeasurementFormat.placeholder)
         #expect(viewModel.abilityText == MeasurementFormat.placeholder)
         #expect(viewModel.hiddenAbilityText == MeasurementFormat.placeholder)
-        #expect(viewModel.evolutionChain.isEmpty)
+        #expect(viewModel.evolutionLines.isEmpty)
     }
 
     @Test("Loads the pokemon, the species and then the evolution chain")
@@ -55,7 +55,7 @@ struct PokemonDetailViewModelTests {
         let service = Self.stubService(
             pokemon: Fixture.pokemon(id: 1, name: "bulbasaur", types: [.grass, .poison]),
             species: Fixture.species(id: 1, evolutionChainIdentifier: 7),
-            evolution: [Fixture.evolutionStage(id: 1, name: "bulbasaur")]
+            evolution: [Fixture.evolutionLine(Fixture.evolutionStage(id: 1, name: "bulbasaur"))]
         )
         let viewModel = PokemonDetailViewModel(item: Fixture.feedItem(id: 1), service: service)
 
@@ -64,7 +64,7 @@ struct PokemonDetailViewModelTests {
         #expect(viewModel.phase == .loaded)
         #expect(viewModel.pokemon?.id == 1)
         #expect(viewModel.species?.id == 1)
-        #expect(viewModel.evolutionChain.map(\.id) == [1])
+        #expect(viewModel.evolutionLines.map(\.id) == [1])
         #expect(service.count(of: .pokemon) == 1)
         #expect(service.count(of: .species) == 1)
         #expect(service.count(of: .evolutionChain) == 1)
@@ -170,14 +170,14 @@ struct PokemonDetailViewModelTests {
         let service = Self.stubService(
             pokemon: Fixture.pokemon(id: 1),
             species: Fixture.species(id: 1, evolutionChainIdentifier: 42),
-            evolution: [Fixture.evolutionStage(id: 1, name: "bulbasaur")]
+            evolution: [Fixture.evolutionLine(Fixture.evolutionStage(id: 1, name: "bulbasaur"))]
         )
         let viewModel = PokemonDetailViewModel(item: Fixture.feedItem(id: 1), service: service)
 
         await viewModel.load()
 
         #expect(service.requestedEvolutionChainIdentifiers == [42])
-        #expect(viewModel.evolutionChain.map(\.id) == [1])
+        #expect(viewModel.evolutionLines.map(\.id) == [1])
     }
 
     @Test("Skips the chain request when the species names no chain")
@@ -192,7 +192,7 @@ struct PokemonDetailViewModelTests {
 
         #expect(viewModel.phase == .loaded)
         #expect(service.count(of: .evolutionChain) == 0)
-        #expect(viewModel.evolutionChain.isEmpty)
+        #expect(viewModel.evolutionLines.isEmpty)
     }
 
     @Test("Keeps the screen usable when the evolution chain fails, since it decorates one tab")
@@ -207,7 +207,7 @@ struct PokemonDetailViewModelTests {
         await viewModel.load()
 
         #expect(viewModel.phase == .loaded)
-        #expect(viewModel.evolutionChain.isEmpty)
+        #expect(viewModel.evolutionLines.isEmpty)
     }
 
     @Test("Fails the screen when the pokemon or the species cannot load")

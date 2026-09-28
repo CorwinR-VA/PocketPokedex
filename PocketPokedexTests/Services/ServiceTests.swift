@@ -507,33 +507,58 @@ struct LivePokemonServiceEvolutionTests {
         return LivePokemonService(client: PokeAPIClient(transport: transport))
     }
 
-    @Test("Flattens a chain in depth-first order")
-    func flattensChain() async throws {
+    @Test("Walks a linear chain as a single line")
+    func walksALinearChain() async throws {
         let chain = JSONFixture.Link.node("bulbasaur", id: 1, evolvesTo: [
             .node("ivysaur", id: 2, details: JSONFixture.evolutionDetail(trigger: "level-up", minLevel: 16), evolvesTo: [
                 .node("venusaur", id: 3, details: JSONFixture.evolutionDetail(trigger: "level-up", minLevel: 32))
             ])
         ])
 
-        let stages = try await Self.service(chain: chain).evolutionChain(id: Self.chainID)
+        let lines = try await Self.service(chain: chain).evolutionChain(id: Self.chainID)
 
-        #expect(stages.map(\.id) == [1, 2, 3])
-        #expect(stages.map(\.name) == ["bulbasaur", "ivysaur", "venusaur"])
-        #expect(stages.map(\.requirement) == [nil, "Lv. 16", "Lv. 32"])
+        #expect(lines.count == 1)
+        #expect(lines[0].stages.map(\.id) == [1, 2, 3])
+        #expect(lines[0].stages.map(\.name) == ["bulbasaur", "ivysaur", "venusaur"])
+        #expect(lines[0].stages.map(\.requirement) == [nil, "Lv. 16", "Lv. 32"])
     }
 
-    @Test("Flattens every branch of a splitting chain")
-    func flattensBranches() async throws {
+    @Test("Gives a branching chain one line per evolution, each starting at the base form")
+    func splitsABranchingChain() async throws {
         let chain = JSONFixture.Link.node("eevee", id: 133, evolvesTo: [
             .node("vaporeon", id: 134, details: JSONFixture.evolutionDetail(trigger: "use-item", item: "water-stone")),
             .node("jolteon", id: 135, details: JSONFixture.evolutionDetail(trigger: "use-item", item: "thunder-stone")),
             .node("flareon", id: 136, details: JSONFixture.evolutionDetail(trigger: "use-item", item: "fire-stone"))
         ])
 
-        let stages = try await Self.service(chain: chain).evolutionChain(id: Self.chainID)
+        let lines = try await Self.service(chain: chain).evolutionChain(id: Self.chainID)
 
-        #expect(stages.map(\.id) == [133, 134, 135, 136])
-        #expect(stages.map(\.requirement) == [nil, "Water Stone", "Thunder Stone", "Fire Stone"])
+        // Not one run of arrows: Jolteon does not evolve from Vaporeon.
+        #expect(lines.count == 3)
+        #expect(lines.map { $0.stages.map(\.id) } == [[133, 134], [133, 135], [133, 136]])
+        #expect(lines.map { $0.stages.map(\.requirement) } == [
+            [nil, "Water Stone"],
+            [nil, "Thunder Stone"],
+            [nil, "Fire Stone"]
+        ])
+        // A line is identified by where it ends, which is what makes each row distinct.
+        #expect(lines.map(\.id) == [134, 135, 136])
+    }
+
+    @Test("Repeats the shared stages of a branch that splits below the base form")
+    func repeatsSharedStagesBelowTheBaseForm() async throws {
+        let chain = JSONFixture.Link.node("wurmple", id: 265, evolvesTo: [
+            .node("silcoon", id: 266, details: JSONFixture.evolutionDetail(trigger: "level-up", minLevel: 7), evolvesTo: [
+                .node("beautifly", id: 267, details: JSONFixture.evolutionDetail(trigger: "level-up", minLevel: 10))
+            ]),
+            .node("cascoon", id: 268, details: JSONFixture.evolutionDetail(trigger: "level-up", minLevel: 7), evolvesTo: [
+                .node("dustox", id: 269, details: JSONFixture.evolutionDetail(trigger: "level-up", minLevel: 10))
+            ])
+        ])
+
+        let lines = try await Self.service(chain: chain).evolutionChain(id: Self.chainID)
+
+        #expect(lines.map { $0.stages.map(\.id) } == [[265, 266, 267], [265, 268, 269]])
     }
 
     @Test("Labels each evolution requirement the way the detail row shows it")
@@ -565,8 +590,8 @@ struct LivePokemonServiceEvolutionTests {
             let chain = JSONFixture.Link.node("base", id: 1, evolvesTo: [
                 .node("evolved", id: 2, details: detail)
             ])
-            let stages = try await Self.service(chain: chain).evolutionChain(id: Self.chainID)
-            #expect(stages.last?.requirement == expected, "\(detail) should read as \(expected)")
+            let lines = try await Self.service(chain: chain).evolutionChain(id: Self.chainID)
+            #expect(lines[0].stages.last?.requirement == expected, "\(detail) should read as \(expected)")
         }
     }
 
@@ -585,7 +610,8 @@ struct LivePokemonServiceEvolutionTests {
             )
         }
 
-        let stages = try await service.evolutionChain(id: Self.chainID)
+        let lines = try await service.evolutionChain(id: Self.chainID)
+        let stages = lines[0].stages
 
         #expect(stages.map(\.artworkURL?.absoluteString) == [
             "https://art.test/bulbasaur.png",
@@ -594,13 +620,52 @@ struct LivePokemonServiceEvolutionTests {
         #expect(stages.map(\.types) == [[.grass], [.poison]])
     }
 
+    @Test("Fetches a shared stage once however many lines pass through it")
+    func decoratesASharedStageOnce() async throws {
+        let chain = JSONFixture.Link.node("eevee", id: 133, evolvesTo: [
+            .node("vaporeon", id: 134, details: JSONFixture.evolutionDetail(item: "water-stone")),
+            .node("jolteon", id: 135, details: JSONFixture.evolutionDetail(item: "thunder-stone"))
+        ])
+
+        let transport = StubHTTPClient(responder: { request -> (data: Data, response: HTTPURLResponse) in
+            let path = request.url?.path() ?? ""
+            let json: String
+
+            if path.hasPrefix("/api/v2/evolution-chain") {
+                json = JSONFixture.evolutionChain(id: Self.chainID, chain: chain)
+            } else if let name = path.split(separator: "/").last.map(String.init) {
+                json = JSONFixture.pokemon(id: name == "eevee" ? 133 : 134, name: name)
+            } else {
+                json = "{}"
+            }
+
+            let response = HTTPURLResponse(
+                url: request.url ?? URL(string: "https://pokeapi.co")!,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (Data(json.utf8), response)
+        })
+        let service = LivePokemonService(client: PokeAPIClient(transport: transport))
+
+        let lines = try await service.evolutionChain(id: Self.chainID)
+
+        #expect(lines.count == 2)
+        // Eevee is in both lines but the API was asked for it once.
+        let eeveeRequests = transport.requests.filter { $0.url?.path().hasSuffix("/eevee") == true }
+        #expect(eeveeRequests.count == 1)
+        #expect(lines.allSatisfy { $0.stages.first?.name == "eevee" })
+    }
+
     @Test("Leaves a stage undecorated when its pokemon cannot be fetched")
     func leavesUndecoratedStage() async throws {
         let chain = JSONFixture.Link.node("bulbasaur", id: 1, evolvesTo: [
             .node("ivysaur", id: 2, details: JSONFixture.evolutionDetail(trigger: "level-up", minLevel: 16))
         ])
 
-        let stages = try await Self.service(chain: chain).evolutionChain(id: Self.chainID)
+        let lines = try await Self.service(chain: chain).evolutionChain(id: Self.chainID)
+        let stages = lines.flatMap(\.stages)
 
         #expect(stages.count == 2)
         #expect(stages.allSatisfy { $0.artworkURL == nil && $0.types.isEmpty })
@@ -618,19 +683,20 @@ struct LivePokemonServiceEvolutionTests {
         let transport = StubHTTPClient(json: """
         { "id": 1, "chain": \(brokenChain) }
         """)
-        let stages = try await LivePokemonService(client: PokeAPIClient(transport: transport))
+        let lines = try await LivePokemonService(client: PokeAPIClient(transport: transport))
             .evolutionChain(id: Self.chainID)
 
-        #expect(stages.isEmpty)
+        #expect(lines.isEmpty)
     }
 
-    @Test("Reports a lone basic stage with no requirement")
+    @Test("Reports a lone basic stage as a single line with no requirement")
     func reportsLoneStage() async throws {
         let service = Self.service(chain: JSONFixture.Link.node("bulbasaur", id: 1))
-        let stages = try await service.evolutionChain(id: Self.chainID)
+        let lines = try await service.evolutionChain(id: Self.chainID)
 
-        #expect(stages.count == 1)
-        #expect(stages[0].requirement == nil)
+        #expect(lines.count == 1)
+        #expect(lines[0].stages.count == 1)
+        #expect(lines[0].stages[0].requirement == nil)
     }
 }
 
@@ -657,7 +723,7 @@ struct CachedPokemonServiceTests {
             pokemonHandler: { _ in bulbasaur },
             speciesHandler: { _ in Fixture.species(id: 1) },
             typesHandler: { [.fire, .water] },
-            evolutionHandler: { _ in [Fixture.evolutionStage(id: 1, name: "bulbasaur")] }
+            evolutionHandler: { _ in [Fixture.evolutionLine(Fixture.evolutionStage(id: 1, name: "bulbasaur"))] }
         )
         let service = CachedPokemonService(upstream: upstream)
 

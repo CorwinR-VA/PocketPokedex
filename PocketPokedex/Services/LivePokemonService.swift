@@ -50,12 +50,19 @@ nonisolated struct LivePokemonService: PokemonService {
         return PokemonType.allCases.filter(known.contains)
     }
 
-    func evolutionChain(id: Int) async throws -> [EvolutionStage] {
+    func evolutionChain(id: Int) async throws -> [EvolutionLine] {
         let payload: EvolutionChainPayload = try await client.get(.evolutionChain(id: id))
-        let flattened = Self.flatten(payload.chain, requirement: nil)
-        guard !flattened.isEmpty else { return [] }
+        let routes = Self.routes(in: payload.chain, requirement: nil)
+        guard !routes.isEmpty else { return [] }
 
-        return await withBoundedTaskGroup(over: flattened, maxConcurrent: 4) { stage -> EvolutionStage in
+        // Decorate each Pokémon once and drop it back into every route that passes through it: the
+        // routes of a branching chain share their base form and often a branch point, and Eevee's
+        // eight routes would otherwise fetch the same artwork eight times.
+        let undecorated = routes.flatMap { $0 }
+        var seen: Set<Int> = []
+        let unique = undecorated.filter { seen.insert($0.id).inserted }
+
+        let decorated = await withBoundedTaskGroup(over: unique, maxConcurrent: 4) { stage -> EvolutionStage in
             guard let pokemon = try? await pokemon(.name(stage.name)) else { return stage }
             return EvolutionStage(
                 id: stage.id,
@@ -64,6 +71,11 @@ nonisolated struct LivePokemonService: PokemonService {
                 types: pokemon.types,
                 requirement: stage.requirement
             )
+        }
+
+        let byID = Dictionary(decorated.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return routes.map { route in
+            EvolutionLine(stages: route.map { byID[$0.id] ?? $0 })
         }
     }
 
@@ -166,10 +178,12 @@ nonisolated struct LivePokemonService: PokemonService {
             .joined(separator: " ")
     }
 
-    private static func flatten(
-        _ link: EvolutionLinkPayload,
+    /// Every route from this link down to a leaf, each one starting with this link's own stage. A link
+    /// with no children is a route on its own, which is what makes a leaf the end of a line.
+    private static func routes(
+        in link: EvolutionLinkPayload,
         requirement: String?
-    ) -> [EvolutionStage] {
+    ) -> [[EvolutionStage]] {
         guard let id = identifier(fromResourceURL: link.species.url) else { return [] }
 
         let stage = EvolutionStage(
@@ -180,14 +194,15 @@ nonisolated struct LivePokemonService: PokemonService {
             requirement: requirement
         )
 
-        let children = link.evolvesTo.flatMap { child in
-            flatten(
-                child,
+        let branches = link.evolvesTo.map { child in
+            routes(
+                in: child,
                 requirement: child.evolutionDetails.first.map(requirementLabel(for:)) ?? "Special"
             )
         }
 
-        return [stage] + children
+        guard !branches.isEmpty else { return [[stage]] }
+        return branches.flatMap { branch in branch.map { [stage] + $0 } }
     }
 
     private static func requirementLabel(for detail: EvolutionDetailPayload) -> String {

@@ -4,7 +4,7 @@ nonisolated struct CachedPokemonService: PokemonService {
     private let upstream: any PokemonService
     private let pokemonMemo = ResourceMemo<PokemonIdentifier, Pokemon>()
     private let speciesMemo = ResourceMemo<PokemonIdentifier, PokemonSpecies>()
-    private let evolutionMemo = ResourceMemo<Int, [EvolutionStage]>()
+    private let evolutionMemo = ResourceMemo<Int, [EvolutionLine]>()
     private static let availableTypesKey = "available-types"
     private let typesMemo = ResourceMemo<String, [PokemonType]>()
 
@@ -38,7 +38,7 @@ nonisolated struct CachedPokemonService: PokemonService {
         }
     }
 
-    func evolutionChain(id: Int) async throws -> [EvolutionStage] {
+    func evolutionChain(id: Int) async throws -> [EvolutionLine] {
         try await evolutionMemo.value(for: id) { [upstream] in
             try await upstream.evolutionChain(id: id)
         }

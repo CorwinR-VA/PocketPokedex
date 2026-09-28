@@ -104,7 +104,7 @@ struct PokemonDetailView: View {
             PokemonAboutTab(
                 pokemon: viewModel.pokemon,
                 species: viewModel.species,
-                evolutionChain: viewModel.evolutionChain
+                evolutionLines: viewModel.evolutionLines
             )
         }
     }

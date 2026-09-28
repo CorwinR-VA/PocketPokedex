@@ -16,7 +16,7 @@ final class PokemonDetailViewModel {
     private(set) var phase: Phase = .loading
     private(set) var pokemon: Pokemon?
     private(set) var species: PokemonSpecies?
-    private(set) var evolutionChain: [EvolutionStage] = []
+    private(set) var evolutionLines: [EvolutionLine] = []
 
     private let service: any PokemonService
 
@@ -74,6 +74,6 @@ final class PokemonDetailViewModel {
 
     private func loadEvolutionChain() async {
         guard let evolutionChainIdentifier = species?.evolutionChainIdentifier else { return }
-        evolutionChain = (try? await service.evolutionChain(id: evolutionChainIdentifier)) ?? []
+        evolutionLines = (try? await service.evolutionChain(id: evolutionChainIdentifier)) ?? []
     }
 }

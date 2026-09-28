@@ -116,14 +116,14 @@ nonisolated final class RecordingPokemonService: PokemonService, @unchecked Send
     private let pokemonHandler: (@Sendable (PokemonIdentifier) async throws -> Pokemon)?
     private let speciesHandler: (@Sendable (PokemonIdentifier) async throws -> PokemonSpecies)?
     private let typesHandler: (@Sendable () async throws -> [PokemonType])?
-    private let evolutionHandler: (@Sendable (Int) async throws -> [EvolutionStage])?
+    private let evolutionHandler: (@Sendable (Int) async throws -> [EvolutionLine])?
 
     init(
         pageHandler: PageHandler? = nil,
         pokemonHandler: (@Sendable (PokemonIdentifier) async throws -> Pokemon)? = nil,
         speciesHandler: (@Sendable (PokemonIdentifier) async throws -> PokemonSpecies)? = nil,
         typesHandler: (@Sendable () async throws -> [PokemonType])? = nil,
-        evolutionHandler: (@Sendable (Int) async throws -> [EvolutionStage])? = nil
+        evolutionHandler: (@Sendable (Int) async throws -> [EvolutionLine])? = nil
     ) {
         self.pageHandler = pageHandler
         self.pokemonHandler = pokemonHandler
@@ -184,7 +184,7 @@ nonisolated final class RecordingPokemonService: PokemonService, @unchecked Send
         return try await typesHandler()
     }
 
-    func evolutionChain(id: Int) async throws -> [EvolutionStage] {
+    func evolutionChain(id: Int) async throws -> [EvolutionLine] {
         record { state in
             state.counts[.evolutionChain, default: 0] += 1
             state.evolutionChainIdentifiers.append(id)
@@ -346,6 +346,11 @@ nonisolated enum Fixture {
             types: types,
             requirement: requirement
         )
+    }
+
+    /// A route through a chain, for the tests that only care that the detail screen has lines.
+    static func evolutionLine(_ stages: EvolutionStage...) -> EvolutionLine {
+        EvolutionLine(stages: stages)
     }
 }
 

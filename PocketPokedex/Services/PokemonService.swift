@@ -12,5 +12,6 @@ nonisolated protocol PokemonService: Sendable {
 
     func availableTypes() async throws -> [PokemonType]
 
-    func evolutionChain(id: Int) async throws -> [EvolutionStage]
+    /// Every route through the chain, one per leaf, each starting at the base form.
+    func evolutionChain(id: Int) async throws -> [EvolutionLine]
 }

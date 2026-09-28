@@ -3,7 +3,7 @@ import SwiftUI
 struct PokemonAboutTab: View {
     let pokemon: Pokemon?
     let species: PokemonSpecies?
-    let evolutionChain: [EvolutionStage]
+    let evolutionLines: [EvolutionLine]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -33,7 +33,7 @@ struct PokemonAboutTab: View {
             }
 
             AboutSection(icon: "arrow.triangle.branch", title: "Evolution Chain") {
-                EvolutionChainRow(stages: evolutionChain)
+                EvolutionChainRow(lines: evolutionLines)
             }
 
             AboutSection(icon: "sparkles", title: "Classification") {
@@ -64,9 +64,15 @@ struct PokemonAboutTab: View {
     PokemonAboutTab(
         pokemon: nil,
         species: nil,
-        evolutionChain: [
-            EvolutionStage(id: 1, name: "bulbasaur", artworkURL: nil, types: [.grass, .poison], requirement: nil),
-            EvolutionStage(id: 2, name: "ivysaur", artworkURL: nil, types: [.grass, .poison], requirement: "Lv. 16")
+        evolutionLines: [
+            EvolutionLine(stages: [
+                EvolutionStage(id: 133, name: "eevee", artworkURL: nil, types: [.normal], requirement: nil),
+                EvolutionStage(id: 134, name: "vaporeon", artworkURL: nil, types: [.water], requirement: "Water Stone")
+            ]),
+            EvolutionLine(stages: [
+                EvolutionStage(id: 133, name: "eevee", artworkURL: nil, types: [.normal], requirement: nil),
+                EvolutionStage(id: 135, name: "jolteon", artworkURL: nil, types: [.electric], requirement: "Thunder Stone")
+            ])
         ]
     )
     .padding()

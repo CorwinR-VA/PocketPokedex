@@ -1,23 +1,34 @@
 import SwiftUI
 
 struct EvolutionChainRow: View {
-    let stages: [EvolutionStage]
+    let lines: [EvolutionLine]
 
     var body: some View {
-        if stages.isEmpty {
+        if lines.isEmpty {
             Text("No evolution data.")
                 .font(.pokedexParagraph)
                 .foregroundStyle(PokedexTheme.textSecondary)
         } else {
-            ViewThatFits(in: .horizontal) {
-                row
-                ScrollView(.horizontal) { row }
-                    .scrollIndicators(.hidden)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(lines) { line in
+                    lineRow(line.stages)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private var row: some View {
+    /// One route per row, left-aligned so the stages a branching chain shares sit under each other —
+    /// Eevee's eight routes all start with the same Eevee tile.
+    private func lineRow(_ stages: [EvolutionStage]) -> some View {
+        ViewThatFits(in: .horizontal) {
+            row(stages)
+            ScrollView(.horizontal) { row(stages) }
+                .scrollIndicators(.hidden)
+        }
+    }
+
+    private func row(_ stages: [EvolutionStage]) -> some View {
         HStack(alignment: .top, spacing: 8) {
             ForEach(stages.enumerated(), id: \.element.id) { index, stage in
                 if index > 0 {
@@ -26,7 +37,6 @@ struct EvolutionChainRow: View {
                 EvolutionStageTile(stage: stage)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 
@@ -92,10 +102,20 @@ private struct TypeDotRow: View {
 }
 
 #Preview {
-    EvolutionChainRow(stages: [
-        EvolutionStage(id: 1, name: "bulbasaur", artworkURL: nil, types: [.grass, .poison], requirement: nil),
-        EvolutionStage(id: 2, name: "ivysaur", artworkURL: nil, types: [.grass, .poison], requirement: "Lv. 16"),
-        EvolutionStage(id: 3, name: "venusaur", artworkURL: nil, types: [.grass, .poison], requirement: "Lv. 32")
+    EvolutionChainRow(lines: [
+        EvolutionLine(stages: [
+            EvolutionStage(id: 1, name: "bulbasaur", artworkURL: nil, types: [.grass, .poison], requirement: nil),
+            EvolutionStage(id: 2, name: "ivysaur", artworkURL: nil, types: [.grass, .poison], requirement: "Lv. 16"),
+            EvolutionStage(id: 3, name: "venusaur", artworkURL: nil, types: [.grass, .poison], requirement: "Lv. 32")
+        ]),
+        EvolutionLine(stages: [
+            EvolutionStage(id: 133, name: "eevee", artworkURL: nil, types: [.normal], requirement: nil),
+            EvolutionStage(id: 134, name: "vaporeon", artworkURL: nil, types: [.water], requirement: "Water Stone")
+        ]),
+        EvolutionLine(stages: [
+            EvolutionStage(id: 133, name: "eevee", artworkURL: nil, types: [.normal], requirement: nil),
+            EvolutionStage(id: 135, name: "jolteon", artworkURL: nil, types: [.electric], requirement: "Thunder Stone")
+        ])
     ])
     .padding()
     .background(PokedexTheme.canvas)
