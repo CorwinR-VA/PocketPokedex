@@ -99,6 +99,10 @@ final class PokedexFeedViewModel {
         totalCount = 0
         nextPageErrorMessage = nil
         items = []
+        // Reset the page count along with everything else. The grid's pagination sentinel re-arms
+        // by watching this value, so leaving it at the old total makes a refresh — which is not a
+        // page load — look like one, and the sentinel then asks for a page nobody scrolled to.
+        loadedPageCount = 0
         phase = .loadingFirstPage
         await loadNextPage()
     }
