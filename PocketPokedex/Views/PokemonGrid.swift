@@ -110,8 +110,8 @@ struct PokemonGrid: View {
         } else if !viewModel.hasMorePages {
             EmptyStateView(
                 icon: "magnifyingglass",
-                title: "No \(selectedTypeName) Pokémon found.",
-                message: "Try another type."
+                title: "No \(viewModel.selectedTypeSummary) Pokémon found.",
+                message: emptyFilterHint
             )
         }
     }
@@ -120,8 +120,8 @@ struct PokemonGrid: View {
         if teamStore.count > 0 {
             EmptyStateView(
                 icon: "heart",
-                title: "No \(selectedTypeName) team members found.",
-                message: "Try another type."
+                title: "No \(viewModel.selectedTypeSummary) team members found.",
+                message: emptyFilterHint
             )
         } else {
             EmptyStateView(
@@ -132,8 +132,12 @@ struct PokemonGrid: View {
         }
     }
 
-    private var selectedTypeName: String {
-        viewModel.selectedType?.name ?? ""
+    /// Only a combination can leave nothing to suggest, so the single-type case keeps its original
+    /// wording.
+    private var emptyFilterHint: String {
+        viewModel.selectedTypes.count > 1
+            ? "Try another type, or remove one."
+            : "Try another type."
     }
 
     private var loadingIndicator: some View {

@@ -193,14 +193,64 @@ struct PokedexFeedViewModelTests {
         await viewModel.loadMoreIfNeeded()
         await waitUntil { viewModel.items.allSatisfy { !$0.types.isEmpty } }
 
-        viewModel.selectedType = .grass
+        viewModel.selectedTypes = [.grass]
         #expect(viewModel.visibleItems.map(\.id) == [1, 3])
 
-        viewModel.selectedType = .water
+        viewModel.selectedTypes = [.water]
         #expect(viewModel.visibleItems.map(\.id) == [4])
 
-        viewModel.selectedType = nil
+        viewModel.selectedTypes = []
         #expect(viewModel.visibleItems.map(\.id) == [1, 2, 3, 4])
+    }
+
+    @Test("Matches every selected type, so adding one narrows the feed")
+    func filtersByAllSelectedTypes() async {
+        let service = Self.stubService(details: Self.details(
+            Fixture.pokemon(id: 1, types: [.grass]),
+            Fixture.pokemon(id: 2, types: [.fire]),
+            Fixture.pokemon(id: 3, types: [.grass, .poison]),
+            Fixture.pokemon(id: 4, types: [.water])
+        ))
+        let viewModel = Self.makeViewModel(service: service, pageSize: 2)
+
+        await viewModel.start()
+        await viewModel.loadMoreIfNeeded()
+        await waitUntil { viewModel.items.allSatisfy { !$0.types.isEmpty } }
+
+        viewModel.selectedTypes = [.grass]
+        let grassOnly = Set(viewModel.visibleItems.map(\.id))
+        #expect(grassOnly == [1, 3])
+
+        // Only the dual-type card carries both, so adding a type can only ever remove cards.
+        viewModel.selectedTypes = [.grass, .poison]
+        #expect(viewModel.visibleItems.map(\.id) == [3])
+        #expect(Set(viewModel.visibleItems.map(\.id)).isSubset(of: grassOnly))
+
+        // A pair nothing carries matches nothing rather than falling back to either type.
+        viewModel.selectedTypes = [.fire, .water]
+        #expect(viewModel.visibleItems.isEmpty)
+    }
+
+    @Test("Caps the type selection at two, replacing the earliest")
+    func capsTheTypeSelection() {
+        let viewModel = Self.makeViewModel(service: Self.stubService())
+
+        viewModel.toggleType(.grass)
+        #expect(viewModel.selectedTypes == [.grass])
+
+        viewModel.toggleType(.poison)
+        #expect(viewModel.selectedTypes == [.grass, .poison])
+
+        // Nothing carries three types, so the third tap replaces the first instead of joining it.
+        viewModel.toggleType(.water)
+        #expect(viewModel.selectedTypes == [.poison, .water])
+
+        // Tapping a filled chip still clears just that one.
+        viewModel.toggleType(.poison)
+        #expect(viewModel.selectedTypes == [.water])
+
+        viewModel.toggleType(.water)
+        #expect(viewModel.selectedTypes.isEmpty)
     }
 
     @Test("Shows nothing while a filter has no matches yet")
@@ -212,7 +262,7 @@ struct PokedexFeedViewModelTests {
         let viewModel = Self.makeViewModel(service: service, pageSize: 2)
 
         await viewModel.start()
-        viewModel.selectedType = .water
+        viewModel.selectedTypes = [.water]
 
         #expect(viewModel.visibleItems.isEmpty)
     }
@@ -368,10 +418,10 @@ struct PokedexFeedViewModelTests {
         await waitUntil { viewModel.teamItems.count == 1 }
         #expect(viewModel.visibleItems.map(\.id) == [4])
 
-        viewModel.selectedType = .water
+        viewModel.selectedTypes = [.water]
         #expect(viewModel.visibleItems.map(\.id) == [4])
 
-        viewModel.selectedType = .grass
+        viewModel.selectedTypes = [.grass]
         #expect(viewModel.visibleItems.isEmpty)
 
         viewModel.toggleTeamFilter()

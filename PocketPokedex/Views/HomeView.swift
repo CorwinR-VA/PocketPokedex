@@ -28,7 +28,8 @@ struct HomeView: View {
 
             TypeFilter(
                 types: feedViewModel.availableTypes,
-                selectedType: $feedViewModel.selectedType
+                selectedTypes: feedViewModel.selectedTypes,
+                onToggle: feedViewModel.toggleType
             )
         }
         .padding()

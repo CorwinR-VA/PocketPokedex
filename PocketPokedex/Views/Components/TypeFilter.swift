@@ -2,7 +2,8 @@ import SwiftUI
 
 struct TypeFilter: View {
     let types: [PokemonType]
-    @Binding var selectedType: PokemonType?
+    let selectedTypes: [PokemonType]
+    let onToggle: (PokemonType) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -14,8 +15,8 @@ struct TypeFilter: View {
             ScrollView(.horizontal) {
                 HStack(spacing: PokedexTheme.Metrics.chipSpacing) {
                     ForEach(types) { type in
-                        TypeChip(type: type, isFilled: selectedType == type) {
-                            toggle(type)
+                        TypeChip(type: type, isFilled: selectedTypes.contains(type)) {
+                            onToggle(type)
                         }
                     }
                 }
@@ -26,14 +27,10 @@ struct TypeFilter: View {
         }
         .frame(height: 70, alignment: .top)
     }
-
-    private func toggle(_ type: PokemonType) {
-        selectedType = (selectedType == type) ? nil : type
-    }
 }
 
 #Preview {
-    TypeFilter(types: PokemonType.allCases, selectedType: .constant(.grass))
+    TypeFilter(types: PokemonType.allCases, selectedTypes: [.grass, .poison]) { _ in }
         .padding()
         .background(PokedexTheme.canvas)
 }

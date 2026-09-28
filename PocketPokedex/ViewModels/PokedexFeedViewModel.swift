@@ -22,7 +22,13 @@ final class PokedexFeedViewModel {
     private(set) var loadedPageCount = 0
     private(set) var nextPageErrorMessage: String?
 
-    var selectedType: PokemonType?
+    /// The selected types, in the order they were picked. Empty means no type filter. At most
+    /// `maximumSelectedTypes` of them, because a card has to carry *every* selected type.
+    var selectedTypes: [PokemonType] = []
+
+    /// No Pokémon has more than two types, so an all-of filter is only ever satisfiable with one or
+    /// two chips. The third tap replaces the earliest selection instead of silently doing nothing.
+    nonisolated static let maximumSelectedTypes = 2
 
     var showsOnlyTeam = false
 
@@ -32,20 +38,31 @@ final class PokedexFeedViewModel {
 
     var visibleItems: [PokemonFeedItem] {
         guard !showsOnlyTeam else {
-            return teamItems.filter { teamStore.contains($0.id) && matchesSelectedType($0) }
+            return teamItems.filter { teamStore.contains($0.id) && matchesSelectedTypes($0) }
         }
 
-        guard let selectedType else { return items }
-        return items.filter { $0.types.contains(selectedType) }
+        guard !selectedTypes.isEmpty else { return items }
+        return items.filter(matchesSelectedTypes)
     }
 
     private var isFilterAwaitingMatches: Bool {
-        !showsOnlyTeam && selectedType != nil && visibleItems.isEmpty && !items.isEmpty && hasMorePages
+        !showsOnlyTeam && !selectedTypes.isEmpty && visibleItems.isEmpty && !items.isEmpty && hasMorePages
     }
 
-    private func matchesSelectedType(_ item: PokemonFeedItem) -> Bool {
-        guard let selectedType else { return true }
-        return item.types.contains(selectedType)
+    /// The selected types named in chip order — "Fire", "Fire and Ice", or empty when unfiltered.
+    /// Chip order rather than tap order, so the copy lines up with the chip row and cannot reshuffle
+    /// between renders.
+    var selectedTypeSummary: String {
+        availableTypes
+            .filter(selectedTypes.contains)
+            .map(\.name)
+            .joined(separator: " and ")
+    }
+
+    /// All-of matching: a card has to carry every selected type. An empty selection matches
+    /// everything, which is what the team path relies on.
+    private func matchesSelectedTypes(_ item: PokemonFeedItem) -> Bool {
+        selectedTypes.allSatisfy(item.types.contains)
     }
 
     private let service: any PokemonService
@@ -165,6 +182,18 @@ final class PokedexFeedViewModel {
                 nextPageErrorMessage = apiError.userFacingMessage
             }
         }
+    }
+
+    func toggleType(_ type: PokemonType) {
+        if let index = selectedTypes.firstIndex(of: type) {
+            selectedTypes.remove(at: index)
+            return
+        }
+
+        if selectedTypes.count == Self.maximumSelectedTypes {
+            selectedTypes.removeFirst()
+        }
+        selectedTypes.append(type)
     }
 
     func toggleTeamFilter() {
