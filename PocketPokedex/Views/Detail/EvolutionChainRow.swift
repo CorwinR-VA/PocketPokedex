@@ -9,9 +9,11 @@ struct EvolutionChainRow: View {
                 .font(.pokedexParagraph)
                 .foregroundStyle(PokedexTheme.textSecondary)
         } else {
+            let geometry = Geometry(longestRoute: lines.map(\.stages.count).max() ?? 1)
+
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(lines) { line in
-                    lineRow(line.stages)
+                    lineRow(line.stages, geometry)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -19,29 +21,69 @@ struct EvolutionChainRow: View {
     }
 
     /// One route per row, left-aligned so the stages a branching chain shares sit under each other —
-    /// Eevee's eight routes all start with the same Eevee tile.
-    private func lineRow(_ stages: [EvolutionStage]) -> some View {
+    /// Eevee's eight routes all start with the same Eevee tile. The row is only wrapped in a scroll
+    /// view when it cannot fit at all, which on a phone means a four-stage route; three stages fit.
+    private func lineRow(_ stages: [EvolutionStage], _ geometry: Geometry) -> some View {
         ViewThatFits(in: .horizontal) {
-            row(stages)
-            ScrollView(.horizontal) { row(stages) }
+            row(stages, geometry)
+            ScrollView(.horizontal) { row(stages, geometry) }
                 .scrollIndicators(.hidden)
         }
     }
 
-    private func row(_ stages: [EvolutionStage]) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+    private func row(_ stages: [EvolutionStage], _ geometry: Geometry) -> some View {
+        HStack(alignment: .top, spacing: geometry.spacing) {
             ForEach(stages.enumerated(), id: \.element.id) { index, stage in
                 if index > 0 {
-                    EvolutionConnector(requirement: stage.requirement)
+                    EvolutionConnector(requirement: stage.requirement, width: geometry.connectorWidth)
                 }
-                EvolutionStageTile(stage: stage)
+                EvolutionStageTile(stage: stage, width: geometry.tileWidth)
             }
+        }
+    }
+
+    /// How much room a route's tiles and connectors get.
+    ///
+    /// Width is in short supply. The About column measures 308 pt on a 6.9" iPhone, and the original
+    /// geometry — three 80 pt tiles, two 40 pt connectors and four 8 pt gaps — comes to 352 pt, so a
+    /// three-stage route overflowed the column and had its last Pokémon clipped.
+    ///
+    /// A long route therefore gives each tile 16 pt less. The artwork stays 64 pt either way, so the
+    /// Pokémon are the same size; it is the padding around them that shrinks. The 44 pt connector and
+    /// 4 pt gaps still leave a 12 pt margin at three stages, and keep the connector wide enough that a
+    /// requirement wraps or scales down rather than being cut in half.
+    ///
+    /// The geometry is chosen once per chain, from its longest route, so every row of a chain lines up
+    /// even when its branches are of different lengths. A four-stage route would still not fit, and
+    /// falls back to the scroll view — no chain in the dex is that long.
+    struct Geometry {
+        let tileWidth: CGFloat
+        let connectorWidth: CGFloat
+        let spacing: CGFloat
+
+        init(longestRoute: Int) {
+            if longestRoute > 2 {
+                tileWidth = 64
+                connectorWidth = 44
+                spacing = 4
+            } else {
+                tileWidth = 80
+                connectorWidth = 72
+                spacing = 8
+            }
+        }
+
+        /// What a route of this length needs, which is what the scroll fallback is measured against.
+        func width(forStages count: Int) -> CGFloat {
+            let gaps = CGFloat(max(count - 1, 0))
+            return CGFloat(count) * tileWidth + gaps * connectorWidth + gaps * 2 * spacing
         }
     }
 }
 
 private struct EvolutionStageTile: View {
     let stage: EvolutionStage
+    var width: CGFloat = 80
 
     var body: some View {
         VStack(spacing: 4) {
@@ -59,12 +101,13 @@ private struct EvolutionStageTile: View {
                 .frame(height: 12)
         }
         .padding(.top, 8)
-        .frame(width: 80, height: 112, alignment: .top)
+        .frame(width: width, height: 112, alignment: .top)
     }
 }
 
 private struct EvolutionConnector: View {
     let requirement: String?
+    let width: CGFloat
 
     var body: some View {
         VStack(spacing: 0) {
@@ -73,14 +116,20 @@ private struct EvolutionConnector: View {
                 .foregroundStyle(PokedexTheme.textSecondary)
                 .frame(width: 20, height: 20)
 
+            // Wraps rather than truncating: "Thunder Stone" is worth two lines, and the one-line cap
+            // is what left every requirement reading "Thunde…". The tighter connector of a three-stage
+            // route scales a long word such as "Friendship" down instead of cutting it in half.
             Text(requirement ?? "Special")
                 .font(.pokedexCaption)
                 .foregroundStyle(PokedexTheme.textSecondary)
-                .lineLimit(1)
+                .multilineTextAlignment(.center)
+                .lineLimit(4)
                 .minimumScaleFactor(0.7)
-                .frame(height: 16)
+                .allowsTightening(true)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: width)
         }
-        .frame(width: 40)
+        .frame(width: width)
         .padding(.top, 38)
     }
 }
