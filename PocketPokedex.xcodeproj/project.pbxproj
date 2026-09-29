@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		8AFA89413067F43B006EC8A9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8AFA89103067F43B006EC8A9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8AFA89173067F43B006EC8A9;
+			remoteInfo = PocketPokedex;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		8AFA89183067F43B006EC8A9 /* PocketPokedex.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PocketPokedex.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8AFA89403067F43B006EC8A9 /* PocketPokedexTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PocketPokedexTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -29,10 +40,22 @@
 			path = PocketPokedex;
 			sourceTree = "<group>";
 		};
+		8AFA89423067F43B006EC8A9 /* PocketPokedexTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PocketPokedexTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		8AFA89153067F43B006EC8A9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AFA893D3067F43B006EC8A9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -46,6 +69,7 @@
 			isa = PBXGroup;
 			children = (
 				8AFA891A3067F43B006EC8A9 /* PocketPokedex */,
+				8AFA89423067F43B006EC8A9 /* PocketPokedexTests */,
 				8AFA89193067F43B006EC8A9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +78,7 @@
 			isa = PBXGroup;
 			children = (
 				8AFA89183067F43B006EC8A9 /* PocketPokedex.app */,
+				8AFA89403067F43B006EC8A9 /* PocketPokedexTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -83,6 +108,29 @@
 			productReference = 8AFA89183067F43B006EC8A9 /* PocketPokedex.app */;
 			productType = "com.apple.product-type.application";
 		};
+		8AFA893C3067F43B006EC8A9 /* PocketPokedexTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8AFA89433067F43C006EC8A9 /* Build configuration list for PBXNativeTarget "PocketPokedexTests" */;
+			buildPhases = (
+				8AFA89393067F43B006EC8A9 /* Sources */,
+				8AFA893D3067F43B006EC8A9 /* Frameworks */,
+				8AFA893E3067F43B006EC8A9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8AFA893F3067F43B006EC8A9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8AFA89423067F43B006EC8A9 /* PocketPokedexTests */,
+			);
+			name = PocketPokedexTests;
+			packageProductDependencies = (
+			);
+			productName = PocketPokedexTests;
+			productReference = 8AFA89403067F43B006EC8A9 /* PocketPokedexTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -95,6 +143,10 @@
 				TargetAttributes = {
 					8AFA89173067F43B006EC8A9 = {
 						CreatedOnToolsVersion = 26.6;
+					};
+					8AFA893C3067F43B006EC8A9 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 8AFA89173067F43B006EC8A9;
 					};
 				};
 			};
@@ -113,12 +165,20 @@
 			projectRoot = "";
 			targets = (
 				8AFA89173067F43B006EC8A9 /* PocketPokedex */,
+				8AFA893C3067F43B006EC8A9 /* PocketPokedexTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		8AFA89163067F43B006EC8A9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8AFA893E3067F43B006EC8A9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +195,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8AFA89393067F43B006EC8A9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8AFA893F3067F43B006EC8A9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8AFA89173067F43B006EC8A9 /* PocketPokedex */;
+			targetProxy = 8AFA89413067F43B006EC8A9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		8AFA89213067F43C006EC8A9 /* Debug */ = {
@@ -321,6 +396,44 @@
 			};
 			name = Release;
 		};
+		8AFA89443067F43C006EC8A9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = corwinrainier89.pokedex.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PocketPokedex.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PocketPokedex";
+			};
+			name = Debug;
+		};
+		8AFA89453067F43C006EC8A9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = corwinrainier89.pokedex.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PocketPokedex.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PocketPokedex";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -338,6 +451,15 @@
 			buildConfigurations = (
 				8AFA89243067F43C006EC8A9 /* Debug */,
 				8AFA89253067F43C006EC8A9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8AFA89433067F43C006EC8A9 /* Build configuration list for PBXNativeTarget "PocketPokedexTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8AFA89443067F43C006EC8A9 /* Debug */,
+				8AFA89453067F43C006EC8A9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

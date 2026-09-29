@@ -8,7 +8,7 @@ Data comes from [PokéAPI](https://pokeapi.co) — a free, keyless, read-only HT
 
 ## Running it
 
-Requires **Xcode 26.6 or later** and the **iOS 26.5 SDK**. There is nothing to install: no SPM packages, no CocoaPods, no build scripts.
+Requires **Xcode 26.6 or later** and the **iOS 26.5 SDK**. There is nothing to install: no SPM packages, no CocoaPods, no build scripts. The tests use Apple's own `Testing` framework, which ships with the toolchain.
 
 ```bash
 open PocketPokedex.xcodeproj      # then press ⌘R
@@ -36,7 +36,47 @@ The app needs a network connection on first launch. If you want to work offline,
 
 `Info.plist` sets `UIDesignRequiresCompatibility = true`, which keeps the pre-Liquid-Glass look on iOS 26 so the screens match the Figma mock. That is a deliberate trade-off, not an oversight — revisit it when the mock is refreshed.
 
-There is **no test target**. Every change currently needs manual verification in a simulator.
+---
+
+## Tests
+
+`PocketPokedexTests` is a host-based unit test bundle that runs against the app target, so it
+reaches internal types through `@testable import` and exercises the real code rather than a
+parallel copy of it. There is no mocking framework and no fixture server: the dependencies are
+already closures and protocols, so `StubHTTPClient` answers from a JSON literal and
+`RecordingPokemonService` answers from a closure while recording what it was asked for.
+
+```bash
+xcodebuild -project PocketPokedex.xcodeproj -scheme PocketPokedex \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' test
+```
+
+One test, while iterating:
+
+```bash
+xcodebuild -project PocketPokedex.xcodeproj -scheme PocketPokedex \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' \
+  test -only-testing:PocketPokedexTests/PokedexFeedViewModelTests/refreshStartsOver
+```
+
+The suite covers, bottom to top:
+
+| Area | What it pins down |
+| --- | --- |
+| `Utilities/` | Dex-number padding, slug display names, measurement strings, and that `withBoundedTaskGroup` keeps its concurrency cap, preserves input order and stops starting work when cancelled. |
+| `Networking/` | Every endpoint's URL and request shape, `PokeAPIError.from(_:)` folding `URLError` and `DecodingError`, and the client's status-code, decoding and cancellation handling. |
+| `Services/` | Mapping from wire payloads to the domain — stat and move ordering, artwork fallback, flavour-text cleanup, evolution requirements — plus `ResourceMemo` and `CachedPokemonService` memoising, coalescing and *not* caching failures or pages. |
+| `Models/` | `PokemonFeedItem` construction and hydration, stat totals, type and stat-kind tables. |
+| `ViewModels/` | Pagination and the page offset, type and team filtering, card and team hydration, refresh, retry, failure and cancellation paths, and `TeamStore` persistence. |
+
+Two bugs turned up while writing it, both now fixed and covered:
+
+- `refresh()` cleared the pages and reset the offset but left `loadedPageCount` at its old total. The grid's pagination sentinel re-arms on `.task(id: viewModel.loadedPageCount)`, so the one page a refresh does load was counted on top of the old total and looked like a second page — and the sentinel answered a pull-to-refresh by asking for a page nobody had scrolled to.
+- `MeasurementFormat` was formatting through the default number style, which groups digits. A 2,345 kg weight rendered with the locale's grouping separator, which in a comma-decimal locale is a full stop — `2.345 kg` sitting next to `0,7 m`.
+
+What the suite does *not* cover: the image pipeline beyond its protocol seam, and anything that
+needs a rendered view. Layout, Dynamic Type and the gesture work on the cards are still checked
+by hand in the simulator.
 
 ---
 
@@ -79,6 +119,10 @@ MVVM with a service layer and an explicit composition root. The shape is deliber
                               ▼
                            PokeAPI
 ```
+
+`PocketPokedexTests` sits beside this stack rather than inside it: it drives the same view models and
+services with the same protocol seams, substituting a stub `HTTPClient` or `PokemonService` for the
+live one. See [Tests](#tests).
 
 The rules that keep it that way:
 
@@ -269,13 +313,13 @@ Every preview takes a dependency graph rather than reaching for the live one:
 
 `AppDependencies.preview` swaps in `PreviewPokemonService` (twenty Pokémon, no network) and `PreviewImageCache` (resolves nothing, so the placeholder and failure treatments are what you see), and points `TeamStore` at a scratch `UserDefaults` suite so tapping `+` in a preview cannot edit your real team.
 
-That is the extension point for tests too: construct `AppDependencies` with a stub `PokemonService` and call the initializer directly.
+That is the extension point the tests use as well: they build `AppDependencies` over a stub service, or hand a view model the stub directly, and drive it without a socket. See [Tests](#tests).
 
 ---
 
 ## Conventions
 
-**Layout.** One type per Swift file, named after the type. Folders are layers, not features. Files the compiler picks up automatically — the target uses a file-system-synchronized group, so adding, renaming or deleting a file needs no project edit.
+**Layout.** One type per Swift file, named after the type. Folders are layers, not features. Files the compiler picks up automatically — both targets use a file-system-synchronized group, so adding, renaming or deleting a file needs no project edit. The test bundle mirrors the layer it covers (`Utilities/`, `Networking/`, `Services/`, `Models/`, `ViewModels/`) with shared doubles under `Support/`.
 
 **Naming.** Spell words out. `PokemonPayload`, not `PokemonDTO`; `dexNumber`, not `formattedID`; `hitPoints`, not `hp`; `pokemonService`, not `apiService`; `memberIdentifiers`, not `memberIDs`.
 
@@ -291,11 +335,11 @@ Four deliberate exceptions, all of which are somebody else's name for the thing:
 
 ## Known gaps
 
-Carried forward deliberately; each is expanded with file and line references in [CODE_AUDIT.md](CODE_AUDIT.md).
+These are deliberate scope decisions rather than oversights, and each is expanded with file and
+line references in [CODE_AUDIT.md](CODE_AUDIT.md).
 
-- **Dynamic Type is not supported.** The type scale uses fixed point sizes and most text rows have fixed heights, both taken from the mock. A user who raises their text size sees no change. Fixing it means making the scale relative *and* relaxing the fixed frames, screen by screen, with the design.
-- **Nothing user-facing is persisted except the team.** The background theme and the appearance override reset on relaunch.
-- **Type filtering is client-side.** A type whose members all sit past the first page is found by pulling pages until one appears. `/type/{name}` returns the complete member list in one request and would bound that cost.
-- **No tests.** Every change is verified by hand.
-- **A few controls are under the 44pt tap target** — the filter chips and the top-bar controls — because the containers that hold them are fixed by the mock. The card's `+` has been widened to 44pt without moving the glyph.
-- **Measurements follow the device locale.** `MeasurementFormat` uses `FormatStyle`, so a comma-decimal locale shows `0,7 m`. Pin the locale if the design requires a full stop unconditionally.
+- **Dynamic Type is not supported.** The type scale uses fixed point sizes and most text rows have fixed heights, both taken from the mock, so a raised text size currently changes nothing. Making it relative means relaxing those fixed frames screen by screen, together with the design.
+- **The team is the only state that survives a relaunch.** The background theme and the appearance override are session state and reset with the process.
+- **Type filtering is client-side.** It runs over the pages already loaded, so a type whose members all sit further down the list is found by pulling pages until one appears. `/type/{name}` returns the complete member list in one request and would bound that cost.
+- **A few controls sit under the 44pt tap target** — the filter chips and the top-bar controls — because the containers that hold them are sized by the mock. The card's `+` has been widened to 44pt without moving the glyph.
+- **Measurements follow the device locale.** `MeasurementFormat` uses `FormatStyle`, so a comma-decimal locale shows `0,7 m`. The digit grouping is switched off so the strings stay short, and the tests assert against the locale's own separators rather than a pinned literal. Pin the locale instead if the design ever requires a full stop unconditionally.
