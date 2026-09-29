@@ -335,8 +335,7 @@ Four deliberate exceptions, all of which are somebody else's name for the thing:
 
 ## Known gaps
 
-These are deliberate scope decisions rather than oversights, and each is expanded with file and
-line references in [CODE_AUDIT.md](CODE_AUDIT.md).
+These are deliberate scope decisions rather than oversights.
 
 - **Dynamic Type is not supported.** The type scale uses fixed point sizes and most text rows have fixed heights, both taken from the mock, so a raised text size currently changes nothing. Making it relative means relaxing those fixed frames screen by screen, together with the design.
 - **The team is the only state that survives a relaunch.** The background theme and the appearance override are session state and reset with the process.
